@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Catálogo Dulcería - Editor de Precios</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; }
+        body { background: #f0f4f8; padding: 16px; min-height: 100vh; display: flex; justify-content: center; }
+        .app { max-width: 1400px; width: 100%; background: white; border-radius: 24px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+        h1 { font-size: 1.8rem; color: #1e293b; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; background: #f8fafc; padding: 12px 16px; border-radius: 16px; border: 1px solid #e2e8f0; }
+        .toolbar input[type="file"] { flex: 1 1 180px; padding: 6px; }
+        .toolbar input[type="text"] { flex: 2 1 220px; padding: 10px 14px; border-radius: 10px; border: 1px solid #cbd5e1; font-size: 1rem; }
+        .btn { padding: 10px 18px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: 0.2s; font-size: 0.9rem; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-success { background: #16a34a; color: white; }
+        .btn-success:hover { background: #15803d; }
+        .btn-warning { background: #f59e0b; color: white; }
+        .btn-warning:hover { background: #d97706; }
+        .btn-outline { background: transparent; border: 1px solid #94a3b8; color: #1e293b; }
+        .btn-outline:hover { background: #e2e8f0; }
+        .stats { margin-left: auto; font-size: 0.9rem; color: #475569; }
+        .main-panel { display: flex; flex-direction: row; gap: 20px; min-height: 500px; }
+        .left-panel { flex: 1 1 40%; min-width: 280px; display: flex; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; background: #fafcff; }
+        .left-panel .header-list { padding: 12px 16px; background: #f1f5f9; font-weight: 600; color: #0f172a; border-bottom: 1px solid #e2e8f0; }
+        .product-list { overflow-y: auto; max-height: 600px; padding: 0; margin: 0; list-style: none; }
+        .product-list li { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.1s; }
+        .product-list li:hover { background: #eef2ff; }
+        .product-list li.active { background: #dbeafe; border-left: 4px solid #2563eb; }
+        .product-list li.modificado { background: #fef9c3; }
+        .product-list .codigo { font-weight: 600; color: #1e293b; font-size: 0.85rem; }
+        .product-list .nombre { font-size: 0.85rem; color: #334155; flex: 1; margin: 0 8px; }
+        .product-list .tipo-tag { font-size: 0.7rem; padding: 2px 10px; border-radius: 20px; background: #e2e8f0; color: #1e293b; }
+        .product-list .tipo-tag.granel { background: #dcfce7; color: #166534; }
+        .product-list .tipo-tag.unidad { background: #fee2e2; color: #991b1b; }
+        .right-panel { flex: 1 1 60%; min-width: 280px; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; background: white; display: flex; flex-direction: column; gap: 16px; overflow-y: auto; max-height: 80vh; }
+        .right-panel .empty { color: #94a3b8; text-align: center; padding: 40px 0; font-size: 1.1rem; }
+        .field-group { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+        .field-group label { font-weight: 600; color: #0f172a; min-width: 100px; }
+        .field-group input, .field-group select { flex: 1; min-width: 120px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
+        .field-group input:focus, .field-group select:focus { outline: 2px solid #2563eb; border-color: transparent; }
+        .price-section { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+        .price-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .price-row label { min-width: 100px; font-weight: 500; color: #1e293b; }
+        .price-row input[type="number"] { flex: 1; min-width: 80px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+        .price-row .porc-input { width: 70px; flex: 0 0 70px; padding: 8px 8px; border: 1px solid #cbd5e1; border-radius: 8px; text-align: center; }
+        .price-row .readonly-price { flex: 1; padding: 8px 12px; background: #f1f5f9; border-radius: 8px; color: #1e293b; font-weight: 500; min-width: 80px; }
+        .extra-prices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+        .extra-price-item { display: flex; align-items: center; gap: 6px; background: #f1f5f9; padding: 4px 10px 4px 14px; border-radius: 20px; }
+        .extra-price-item span { font-weight: 500; }
+        .extra-price-item button { background: transparent; border: none; color: #ef4444; cursor: pointer; font-size: 1.2rem; line-height: 1; }
+        .add-extra { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+        .add-extra input, .add-extra select { padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 6px; }
+        .add-extra input[type="text"] { flex: 1 1 120px; }
+        .add-extra input[type="number"] { width: 80px; flex: 0 0 80px; }
+        .add-extra select { width: 100px; flex: 0 0 100px; }
+        .action-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
+        .msg-preview { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; font-family: monospace; white-space: pre-wrap; font-size: 0.9rem; max-height: 200px; overflow-y: auto; }
+        .img-preview { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; background: white; text-align: center; }
+        .img-preview canvas { max-width: 100%; height: auto; border-radius: 8px; }
+        @media (max-width: 800px) { .main-panel { flex-direction: column; } .left-panel { flex: 1 1 auto; } .right-panel { flex: 1 1 auto; } .toolbar .stats { margin-left: 0; } }
+        @media (max-width: 480px) { .field-group { flex-direction: column; align-items: stretch; } .field-group label { min-width: auto; } .price-row { flex-direction: column; align-items: stretch; } .price-row label { min-width: auto; } }
+    </style>
+</head>
+<body>
+<div class="app" id="app">
+    <h1>📦 Catálogo Dulcería</h1>
+    <div class="toolbar">
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        <input type="text" id="searchInput" placeholder="🔍 Buscar por código o producto...">
+        <button class="btn btn-success" onclick="exportExcel()">⬇️ Exportar para Eleventa</button>
+        <span class="stats" id="statsLabel">0 productos</span>
+    </div>
+
+    <div class="main-panel">
+        <div class="left-panel">
+            <div class="header-list">📋 Productos</div>
+            <ul class="product-list" id="productList"></ul>
+        </div>
+        <div class="right-panel" id="rightPanel">
+            <div class="empty">👈 Selecciona un producto para editarlo</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- UTILIDADES ----------
+    function redondear(precio) {
+        if (isNaN(precio) || precio === 0) return 0;
+        return Math.round(precio * 2) / 2;
+    }
+
+    // Convierte a número eliminando cualquier carácter no numérico (excepto punto y signo menos)
+    function toNumber(val) {
+        if (typeof val === 'number') return isNaN(val) ? 0 : val;
+        if (val === null || val === undefined || val === '') return 0;
+        // Elimina todo excepto dígitos, punto decimal y signo menos
+        let str = String(val).replace(/[^0-9.-]/g, '');
+        const n = parseFloat(str);
+        return isNaN(n) ? 0 : n;
+    }
+
+    function escapeHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // ---------- DATOS GLOBALES ----------
+    let currentData = [];
+    let selectedIndex = -1;
+
+    // ---------- CARGAR EXCEL ----------
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(loadEvent) {
+            try {
+                const data = new Uint8Array(loadEvent.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+                if (jsonData.length === 0) { alert('El archivo está vacío.'); return; }
+                currentData = jsonData.map(row => {
+                    const tipo = String(row['Tipo de Venta'] || '').toUpperCase().includes('GRANEL') ? 'granel' : 'paquete';
+                    row._tipo = tipo;
+                    row._modificado = false;
+
+                    row['P. Costo'] = toNumber(row['P. Costo']);
+                    row['P. Venta'] = toNumber(row['P. Venta']);
+                    row['P. Mayoreo'] = toNumber(row['P. Mayoreo']);
+
+                    if (tipo === 'paquete') {
+                        row._porcentajeNormal = toNumber(row['Porc_Normal']) || 21;
+                        row._porcentajeMayoreo = toNumber(row['Porc_Mayoreo']) || 15;
+                        row._porcentajeCaja = toNumber(row['Porc_Caja_Paq']) || 15;
+                        row._cantidadCaja = toNumber(row['Cant_Caja_Paq']) || 1;
+                        row._precioCaja = toNumber(row['Precio_Caja_Paq']) || 0;
+                        if (row['Precios_Extra'] && typeof row['Precios_Extra'] === 'string') {
+                            try {
+                                const parsed = JSON.parse(row['Precios_Extra']);
+                                row._preciosExtra = Array.isArray(parsed) ? parsed.map(p => ({
+                                    nombre: p.nombre,
+                                    precio: toNumber(p.precio),
+                                    tipo: p.tipo || 'fijo',
+                                    porcentaje: toNumber(p.porcentaje)
+                                })) : [];
+                            } catch(e) { row._preciosExtra = []; }
+                        } else {
+                            row._preciosExtra = row._preciosExtra || [];
+                        }
+                    } else {
+                        row._porcentajeXmultiplicar = toNumber(row['Porc_Xmultiplicar']) || 40;
+                        row._porcentajeKilo = toNumber(row['Porc_Kilo']) || 20;
+                        row._porcentajeCaja = toNumber(row['Porc_Caja']) || 15;
+                        row._cantidadCaja = toNumber(row['Cantidad_Caja']) || 1;
+                        row._precioXmultiplicar = toNumber(row['Precio_Xmultiplicar']);
+                        row._precio100g = toNumber(row['Precio_100g']);
+                        row._precio250g = toNumber(row['Precio_250g']);
+                        row._precioKilo = toNumber(row['Precio_Kilo']) || row['P. Venta'];
+                        row._precioCaja = toNumber(row['Precio_Caja']) || row['P. Mayoreo'];
+                    }
+                    return row;
+                });
+                renderList(currentData);
+                document.getElementById('statsLabel').textContent = `${currentData.length} productos`;
+                selectedIndex = -1;
+                document.getElementById('rightPanel').innerHTML = `<div class="empty">👈 Selecciona un producto para editarlo</div>`;
+            } catch (error) {
+                alert('Error al leer el archivo: ' + error.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    // ---------- RENDER LISTA ----------
+    function renderList(data) {
+        const list = document.getElementById('productList');
+        if (!data || data.length === 0) {
+            list.innerHTML = '<li style="padding:20px;text-align:center;color:#94a3b8;">No hay productos</li>';
+            return;
+        }
+        let html = '';
+        data.forEach((row, idx) => {
+            const codigo = escapeHtml(row['Código'] || '');
+            const producto = escapeHtml(row['Producto'] || '');
+            const tipo = String(row['Tipo de Venta'] || '').toUpperCase();
+            const tipoClase = tipo.includes('GRANEL') ? 'granel' : 'unidad';
+            const active = (idx === selectedIndex) ? 'active' : '';
+            const modificado = row._modificado ? 'modificado' : '';
+            html += `<li class="${active} ${modificado}" data-index="${idx}">
+                <span class="codigo">${codigo}</span>
+                <span class="nombre">${producto}</span>
+                <span class="tipo-tag ${tipoClase}">${tipo.includes('GRANEL') ? 'Granel' : 'Paquete'}</span>
+            </li>`;
+        });
+        list.innerHTML = html;
+        list.querySelectorAll('li').forEach(li => {
+            li.addEventListener('click', function() {
+                const idx = parseInt(this.dataset.index);
+                selectProduct(idx);
+            });
+        });
+    }
+
+    // ---------- SELECCIONAR PRODUCTO ----------
+    function selectProduct(idx) {
+        selectedIndex = idx;
+        renderList(currentData);
+        renderEditPanel(idx);
+    }
+
+    // ---------- RENDER PANEL EDICIÓN ----------
+    function renderEditPanel(idx) {
+        const row = currentData[idx];
+        if (!row) return;
+        const panel = document.getElementById('rightPanel');
+        const tipo = row._tipo || 'paquete';
+        const codigo = row['Código'] || '';
+        const producto = row['Producto'] || '';
+        const depto = row['Departamento'] || '';
+        const proveedor = row['Proveedor'] || '';
+        const costo = toNumber(row['P. Costo']);
+        const venta = toNumber(row['P. Venta']);
+        const mayoreo = toNumber(row['P. Mayoreo']);
+
+        let html = `
+            <div class="field-group">
+                <label>Código</label>
+                <input type="text" id="editCodigo" value="${escapeHtml(codigo)}">
+            </div>
+            <div class="field-group">
+                <label>Producto</label>
+                <input type="text" id="editProducto" value="${escapeHtml(producto)}">
+            </div>
+            <div class="field-group">
+                <label>Departamento</label>
+                <input type="text" id="editDepto" value="${escapeHtml(depto)}">
+            </div>
+            <div class="field-group">
+                <label>Proveedor</label>
+                <input type="text" id="editProveedor" value="${escapeHtml(proveedor)}">
+            </div>
+            <div class="field-group">
+                <label>Costo</label>
+                <input type="number" step="0.01" id="editCosto" value="${costo}">
+            </div>
+            <div class="field-group">
+                <label>Tipo de Venta</label>
+                <select id="editTipo">
+                    <option value="paquete" ${tipo==='paquete'?'selected':''}>Paquete (UNIDAD)</option>
+                    <option value="granel" ${tipo==='granel'?'selected':''}>Granel</option>
+                </select>
+            </div>
+        `;
+
+        if (tipo === 'paquete') {
+            const porcNormal = row._porcentajeNormal || 21;
+            const porcMayoreo = row._porcentajeMayoreo || 15;
+            const porcCaja = row._porcentajeCaja || 15;
+            const cantCaja = row._cantidadCaja || 1;
+            const precioCaja = row._precioCaja || 0;
+            html += `
+                <div class="price-section">
+                    <div class="price-row">
+                        <label>Precio Normal</label>
+                        <input type="number" step="0.01" id="editVenta" value="${venta}">
+                        <input type="number" step="0.01" class="porc-input" id="editPorcNormal" value="${porcNormal}"> %
+                    </div>
+                    <div class="price-row">
+                        <label>Precio Mayoreo</label>
+                        <input type="number" step="0.01" id="editMayoreo" value="${mayoreo}">
+                        <input type="number" step="0.01" class="porc-input" id="editPorcMayoreo" value="${porcMayoreo}"> %
+                    </div>
+                    <div class="price-row">
+                        <label>Caja (cantidad)</label>
+                        <input type="number" step="1" id="editCantCajaPaq" value="${cantCaja}">
+                        <input type="number" step="0.01" class="porc-input" id="editPorcCajaPaq" value="${porcCaja}"> %
+                    </div>
+                    <div class="price-row">
+                        <label>Precio Caja</label>
+                        <span class="readonly-price" id="displayCajaPaq">$${precioCaja.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <label>Precios Extra</label>
+                        <div class="extra-prices" id="extraPricesContainer"></div>
+                    </div>
+                    <div class="add-extra">
+                        <input type="text" id="extraName" placeholder="Nombre (ej. Docena)">
+                        <input type="number" step="0.01" id="extraValue" placeholder="Valor">
+                        <select id="extraType">
+                            <option value="fijo">Fijo</option>
+                            <option value="porcentaje">% sobre costo</option>
+                        </select>
+                        <button class="btn btn-outline" onclick="addExtraPrice()">➕ Agregar</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            // Granel
+            const porcX = row._porcentajeXmultiplicar || 40;
+            const porcK = row._porcentajeKilo || 20;
+            const porcC = row._porcentajeCaja || 15;
+            const cantC = row._cantidadCaja || 1;
+            const pX = toNumber(row._precioXmultiplicar);
+            const p100 = toNumber(row._precio100g);
+            const p250 = toNumber(row._precio250g);
+            const pK = toNumber(row._precioKilo);
+            const pC = toNumber(row._precioCaja);
+            html += `
+                <div class="price-section">
+                    <div class="price-row">
+                        <label>% Xmultiplicar</label>
+                        <input type="number" step="0.01" class="porc-input" id="editPorcX" value="${porcX}"> %
+                    </div>
+                    <div class="price-row">
+                        <label>Xmultiplicar</label>
+                        <span class="readonly-price" id="displayX">$${pX.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <label>100g</label>
+                        <span class="readonly-price" id="display100">$${p100.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <label>250g</label>
+                        <span class="readonly-price" id="display250">$${p250.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <label>% Kilo</label>
+                        <input type="number" step="0.01" class="porc-input" id="editPorcK" value="${porcK}"> %
+                    </div>
+                    <div class="price-row">
+                        <label>Kilo</label>
+                        <span class="readonly-price" id="displayK">$${pK.toFixed(2)}</span>
+                    </div>
+                    <div class="price-row">
+                        <label>% Caja</label>
+                        <input type="number" step="0.01" class="porc-input" id="editPorcC" value="${porcC}"> %
+                    </div>
+                    <div class="price-row">
+                        <label>Cantidad Caja</label>
+                        <input type="number" step="1" id="editCantC" value="${cantC}">
+                    </div>
+                    <div class="price-row">
+                        <label>Caja</label>
+                        <span class="readonly-price" id="displayC">$${pC.toFixed(2)}</span>
+                    </div>
+                    <button class="btn btn-outline" onclick="generarImagen()">🖼️ Generar Imagen</button>
+                    <div class="img-preview" id="imgPreview"></div>
+                </div>
+            `;
+        }
+
+        html += `
+            <div class="action-buttons">
+                <button class="btn btn-primary" onclick="saveProduct()">💾 Guardar cambios</button>
+                <button class="btn btn-warning" onclick="sendWhatsApp()">📲 Enviar a WhatsApp</button>
+            </div>
+            <div class="msg-preview" id="msgPreview">Vista previa del mensaje</div>
+        `;
+
+        panel.innerHTML = html;
+
+        // Cargar precios extra para paquete
+        if (tipo === 'paquete') {
+            renderExtraPrices(row);
+        }
+
+        // Eventos para recalcular automáticamente
+        const costoInput = document.getElementById('editCosto');
+        const porcInputs = panel.querySelectorAll('.porc-input');
+        const recalc = () => { recalcularPrecios(); updatePreview(); };
+        costoInput.addEventListener('input', recalc);
+        porcInputs.forEach(inp => inp.addEventListener('input', recalc));
+        if (tipo === 'paquete') {
+            const cantInput = document.getElementById('editCantCajaPaq');
+            if (cantInput) cantInput.addEventListener('input', recalc);
+        } else {
+            const cantInput = document.getElementById('editCantC');
+            if (cantInput) cantInput.addEventListener('input', recalc);
+        }
+        document.getElementById('editTipo').addEventListener('change', function() {
+            row._tipo = this.value;
+            row['Tipo de Venta'] = this.value === 'paquete' ? 'UNIDAD' : 'GRANEL';
+            renderEditPanel(selectedIndex);
+        });
+
+        // Actualizar vista previa al cambiar cualquier campo
+        const allInputs = panel.querySelectorAll('input, select');
+        allInputs.forEach(inp => inp.addEventListener('input', updatePreview));
+
+        recalcularPrecios();
+        updatePreview();
+    }
+
+    // ---------- RECALCULAR PRECIOS ----------
+    function recalcularPrecios() {
+        const row = currentData[selectedIndex];
+        if (!row) return;
+        const tipo = row._tipo;
+        const costoInput = document.getElementById('editCosto');
+        if (!costoInput) return;
+        const costo = toNumber(costoInput.value);
+        row['P. Costo'] = costo;
+
+        if (tipo === 'paquete') {
+            const porcNormal = toNumber(document.getElementById('editPorcNormal').value);
+            const porcMayoreo = toNumber(document.getElementById('editPorcMayoreo').value);
+            row._porcentajeNormal = porcNormal;
+            row._porcentajeMayoreo = porcMayoreo;
+            const normal = redondear(costo * (1 + porcNormal/100));
+            const mayoreo = redondear(costo * (1 + porcMayoreo/100));
+            row['P. Venta'] = normal;
+            row['P. Mayoreo'] = mayoreo;
+            document.getElementById('editVenta').value = normal;
+            document.getElementById('editMayoreo').value = mayoreo;
+
+            const porcCaja = toNumber(document.getElementById('editPorcCajaPaq').value);
+            const cantCaja = toNumber(document.getElementById('editCantCajaPaq').value) || 1;
+            row._porcentajeCaja = porcCaja;
+            row._cantidadCaja = cantCaja;
+            const precioCaja = redondear(costo * (1 + porcCaja/100) * cantCaja);
+            row._precioCaja = precioCaja;
+            document.getElementById('displayCajaPaq').textContent = '$' + precioCaja.toFixed(2);
+        } else {
+            const porcX = toNumber(document.getElementById('editPorcX').value);
+            const porcK = toNumber(document.getElementById('editPorcK').value);
+            const porcC = toNumber(document.getElementById('editPorcC').value);
+            const cantC = toNumber(document.getElementById('editCantC').value) || 1;
+            row._porcentajeXmultiplicar = porcX;
+            row._porcentajeKilo = porcK;
+            row._porcentajeCaja = porcC;
+            row._cantidadCaja = cantC;
+
+            const pX = redondear(costo * (1 + porcX/100));
+            const p100 = redondear(pX / 10);
+            const p250 = redondear(pX / 4);
+            const pK = redondear(costo * (1 + porcK/100));
+            const pC = redondear(costo * (1 + porcC/100) * cantC);
+
+            row._precioXmultiplicar = pX;
+            row._precio100g = p100;
+            row._precio250g = p250;
+            row._precioKilo = pK;
+            row._precioCaja = pC;
+            row['P. Venta'] = pK;
+            row['P. Mayoreo'] = pC;
+
+            document.getElementById('displayX').textContent = '$' + pX.toFixed(2);
+            document.getElementById('display100').textContent = '$' + p100.toFixed(2);
+            document.getElementById('display250').textContent = '$' + p250.toFixed(2);
+            document.getElementById('displayK').textContent = '$' + pK.toFixed(2);
+            document.getElementById('displayC').textContent = '$' + pC.toFixed(2);
+        }
+
+        recalcularExtras();
+    }
+
+    // ---------- RECALCULAR PRECIOS EXTRA (PAQUETE) ----------
+    function recalcularExtras() {
+        const row = currentData[selectedIndex];
+        if (!row || row._tipo !== 'paquete') return;
+        const costo = toNumber(row['P. Costo']);
+        const extras = row._preciosExtra || [];
+        extras.forEach(extra => {
+            if (extra.tipo === 'porcentaje' && extra.porcentaje) {
+                extra.precio = redondear(costo * (1 + extra.porcentaje/100));
+            }
+        });
+        renderExtraPrices(row);
+        updatePreview();
+    }
+
+    // ---------- PRECIOS EXTRA (PAQUETE) ----------
+    function renderExtraPrices(row) {
+        const container = document.getElementById('extraPricesContainer');
+        if (!container) return;
+        const extras = row._preciosExtra || [];
+        if (extras.length === 0) {
+            container.innerHTML = '<span style="color:#94a3b8;font-size:0.9rem;">Sin precios extra</span>';
+            return;
+        }
+        let html = '';
+        extras.forEach((item, i) => {
+            const precio = toNumber(item.precio);
+            html += `<div class="extra-price-item">
+                <span>${escapeHtml(item.nombre)}: $${precio.toFixed(2)} ${item.tipo === 'porcentaje' ? '('+item.porcentaje+'%)' : ''}</span>
+                <button onclick="removeExtraPrice(${i})">✕</button>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function addExtraPrice() {
+        const nameInput = document.getElementById('extraName');
+        const valueInput = document.getElementById('extraValue');
+        const typeSelect = document.getElementById('extraType');
+        const name = nameInput.value.trim();
+        const tipo = typeSelect.value;
+        let valor = toNumber(valueInput.value);
+        if (!name || valor < 0) {
+            alert('Ingresa un nombre y valor válido.');
+            return;
+        }
+        const row = currentData[selectedIndex];
+        if (!row) return;
+        if (!row._preciosExtra) row._preciosExtra = [];
+        const extra = { nombre: name, tipo: tipo };
+        if (tipo === 'fijo') {
+            extra.precio = valor;
+        } else {
+            extra.porcentaje = valor;
+            const costo = toNumber(row['P. Costo']);
+            extra.precio = redondear(costo * (1 + valor/100));
+        }
+        row._preciosExtra.push(extra);
+        nameInput.value = '';
+        valueInput.value = '';
+        renderExtraPrices(row);
+        updatePreview();
+    }
+
+    function removeExtraPrice(index) {
+        const row = currentData[selectedIndex];
+        if (!row) return;
+        row._preciosExtra.splice(index, 1);
+        renderExtraPrices(row);
+        updatePreview();
+    }
+
+    // ---------- GUARDAR PRODUCTO ----------
+    function saveProduct() {
+        const row = currentData[selectedIndex];
+        if (!row) return;
+        row['Código'] = document.getElementById('editCodigo').value.trim();
+        row['Producto'] = document.getElementById('editProducto').value.trim();
+        row['Departamento'] = document.getElementById('editDepto').value.trim();
+        row['Proveedor'] = document.getElementById('editProveedor').value.trim();
+        row['P. Costo'] = toNumber(document.getElementById('editCosto').value);
+        row._tipo = document.getElementById('editTipo').value;
+        row['Tipo de Venta'] = row._tipo === 'paquete' ? 'UNIDAD' : 'GRANEL';
+        recalcularPrecios();
+        row._modificado = true;
+        renderList(currentData);
+        renderEditPanel(selectedIndex);
+        alert('Producto guardado correctamente.');
+    }
+
+    // ---------- VISTA PREVIA MENSAJE ----------
+    function updatePreview() {
+        const row = currentData[selectedIndex];
+        if (!row) return;
+        const msg = buildWhatsAppMessage(row);
+        const preview = document.getElementById('msgPreview');
+        if (preview) preview.textContent = msg;
+    }
+
+    function buildWhatsAppMessage(row) {
+        const tipo = row._tipo || 'paquete';
+        const nombre = row['Producto'] || 'Sin nombre';
+        let msg = '';
+        if (tipo === 'paquete') {
+            const normal = toNumber(row['P. Venta']);
+            const mayoreo = toNumber(row['P. Mayoreo']);
+            msg = `${nombre}\nPrecio normal: $${normal.toFixed(2)}`;
+            if (mayoreo > 0) msg += `\nMayoreo: $${mayoreo.toFixed(2)}`;
+            const precioCaja = toNumber(row._precioCaja);
+            if (precioCaja > 0) msg += `\nCaja (${row._cantidadCaja || 1}pz): $${precioCaja.toFixed(2)}`;
+            const extras = row._preciosExtra || [];
+            extras.forEach(extra => {
+                const precio = toNumber(extra.precio);
+                if (precio > 0) msg += `\n${extra.nombre}: $${precio.toFixed(2)}`;
+            });
+        } else {
+            const p100 = toNumber(row._precio100g);
+            const p250 = toNumber(row._precio250g);
+            const pX = toNumber(row._precioXmultiplicar);
+            const pK = toNumber(row._precioKilo);
+            const pC = toNumber(row._precioCaja);
+            msg = `${nombre}`;
+            if (p100 > 0) msg += `\n100g: $${p100.toFixed(2)}`;
+            if (p250 > 0) msg += `\n250g: $${p250.toFixed(2)}`;
+            if (pX > 0) msg += `\nXmultiplicar: $${pX.toFixed(2)}`;
+            if (pK > 0) msg += `\nKilo: $${pK.toFixed(2)}`;
+            if (pC > 0) msg += `\nCaja (${row._cantidadCaja || 1}pz): $${pC.toFixed(2)}`;
+        }
+        return msg;
+    }
+
+    // ---------- ENVIAR WHATSAPP ----------
+    function sendWhatsApp() {
+        const row = currentData[selectedIndex];
+        if (!row) return;
+        const msg = buildWhatsAppMessage(row);
+        const numero = '5215519321156';
+        const url = `https://api.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank');
+    }
+
+    // ---------- GENERAR IMAGEN (GRANEL) ----------
+    function generarImagen() {
+        const row = currentData[selectedIndex];
+        if (!row || row._tipo !== 'granel') {
+            alert('Esta función solo está disponible para productos a granel.');
+            return;
+        }
+        const nombre = row['Producto'] || 'Producto';
+        const p100 = toNumber(row._precio100g);
+        const p250 = toNumber(row._precio250g);
+        const pX = toNumber(row._precioXmultiplicar);
+        const pK = toNumber(row._precioKilo);
+        const pC = toNumber(row._precioCaja);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 400;
+        canvas.height = 280;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#cccccc';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 20px Segoe UI, sans-serif';
+        ctx.textAlign = 'center';
+        let nombreMostrar = nombre;
+        if (nombre.length > 30) nombreMostrar = nombre.substring(0, 28) + '…';
+        ctx.fillText(nombreMostrar, canvas.width/2, 40);
+
+        const datos = [
+            ['100g', p100],
+            ['250g', p250],
+            ['Xmultiplicar', pX],
+            ['Kilo', pK],
+            ['Caja', pC]
+        ];
+        let y = 65;
+        const altoFila = 30;
+        datos.forEach(([label, price]) => {
+            if (price > 0) {
+                ctx.strokeStyle = '#e2e8f0';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(20, y);
+                ctx.lineTo(canvas.width - 20, y);
+                ctx.stroke();
+
+                ctx.fillStyle = '#0f172a';
+                ctx.font = '16px Segoe UI, sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(label, 30, y + 22);
+                ctx.textAlign = 'right';
+                ctx.fillText('$' + price.toFixed(2), canvas.width - 30, y + 22);
+                y += altoFila;
+            }
+        });
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(20, y);
+        ctx.lineTo(canvas.width - 20, y);
+        ctx.stroke();
+
+        const container = document.getElementById('imgPreview');
+        container.innerHTML = '';
+        container.appendChild(canvas);
+    }
+
+    // ---------- EXPORTAR EXCEL (SOLO MODIFICADOS, CAMPOS ELEVENTA) ----------
+    function exportExcel() {
+        const modificados = currentData.filter(row => row._modificado === true);
+        if (modificados.length === 0) {
+            alert('No hay productos modificados para exportar.');
+            return;
+        }
+        const exportData = modificados.map(row => ({
+            'Código': row['Código'] || '',
+            'Producto': row['Producto'] || '',
+            'P. Costo': toNumber(row['P. Costo']),
+            'P. Venta': toNumber(row['P. Venta']),
+            'P. Mayoreo': toNumber(row['P. Mayoreo']),
+            'Departamento': row['Departamento'] || '',
+            'Existencia': row['Existencia'] || '',
+            'Inv. Mínimo': row['Inv. Mínimo'] || '',
+            'Inv. Máximo': row['Inv. Máximo'] || '',
+            'Tipo de Venta': row['Tipo de Venta'] || '',
+            'Proveedor': row['Proveedor'] || ''
+        }));
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/octet-stream' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'actualizacion_eleventa.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+    }
+
+    // ---------- BÚSQUEDA ----------
+    document.getElementById('searchInput').addEventListener('input', function() {
+        const term = this.value.trim().toLowerCase();
+        const listItems = document.querySelectorAll('#productList li');
+        listItems.forEach(li => {
+            const text = li.textContent.toLowerCase();
+            li.style.display = text.includes(term) ? '' : 'none';
+        });
+    });
+</script>
+</body>
+</html>
