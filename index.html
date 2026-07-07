@@ -42,6 +42,8 @@
         .field-group label { font-weight: 600; color: #0f172a; min-width: 100px; }
         .field-group input, .field-group select { flex: 1; min-width: 120px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
         .field-group input:focus, .field-group select:focus { outline: 2px solid #2563eb; border-color: transparent; }
+        .field-group input[type="color"] { min-width: 50px; padding: 4px; height: 40px; flex: 0 0 60px; }
+        .field-group input[type="number"] { flex: 0 1 80px; min-width: 60px; }
         .price-section { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
         .price-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
         .price-row label { min-width: 100px; font-weight: 500; color: #1e293b; }
@@ -59,8 +61,14 @@
         .add-extra select { width: 100px; flex: 0 0 100px; }
         .action-buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
         .msg-preview { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; font-family: monospace; white-space: pre-wrap; font-size: 0.9rem; max-height: 200px; overflow-y: auto; }
-        .img-preview { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; background: white; text-align: center; }
-        .img-preview canvas { max-width: 100%; height: auto; border-radius: 8px; }
+        .img-preview { margin-top: 12px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px; background: white; text-align: center; position: relative; user-select: none; }
+        .img-preview canvas { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; touch-action: none; }
+        .drag-hint { font-size: 0.8rem; color: #94a3b8; text-align: center; margin-top: 6px; }
+        .drag-hint span { display: inline-block; background: #f1f5f9; padding: 2px 10px; border-radius: 12px; }
+        .dimension-controls { display: flex; flex-wrap: wrap; gap: 8px 16px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0; margin-top: 8px; }
+        .dimension-controls .control-group { display: flex; align-items: center; gap: 6px; }
+        .dimension-controls .control-group label { font-weight: 500; font-size: 0.85rem; min-width: auto; }
+        .dimension-controls .control-group input { width: 60px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.85rem; }
         @media (max-width: 800px) { .main-panel { flex-direction: column; } .left-panel { flex: 1 1 auto; } .right-panel { flex: 1 1 auto; } .toolbar .stats { margin-left: 0; } }
         @media (max-width: 480px) { .field-group { flex-direction: column; align-items: stretch; } .field-group label { min-width: auto; } .price-row { flex-direction: column; align-items: stretch; } .price-row label { min-width: auto; } }
     </style>
@@ -93,11 +101,9 @@
         return Math.round(precio * 2) / 2;
     }
 
-    // Convierte a número eliminando cualquier carácter no numérico (excepto punto y signo menos)
     function toNumber(val) {
         if (typeof val === 'number') return isNaN(val) ? 0 : val;
         if (val === null || val === undefined || val === '') return 0;
-        // Elimina todo excepto dígitos, punto decimal y signo menos
         let str = String(val).replace(/[^0-9.-]/g, '');
         const n = parseFloat(str);
         return isNaN(n) ? 0 : n;
@@ -114,6 +120,9 @@
     // ---------- DATOS GLOBALES ----------
     let currentData = [];
     let selectedIndex = -1;
+    // Variables de arrastre
+    let dragState = null; // { type: 'col'|'row'|'table', startX, startY, startVal, canvas }
+    const TOLERANCIA = 12;
 
     // ---------- CARGAR EXCEL ----------
     document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -351,8 +360,41 @@
                         <label>Caja</label>
                         <span class="readonly-price" id="displayC">$${pC.toFixed(2)}</span>
                     </div>
+                    
+                    <div class="field-group">
+                        <label>Color filas alternas</label>
+                        <input type="color" id="colorAlternate" value="#f8fafc">
+                    </div>
+                    
+                    <!-- Controles de dimensiones -->
+                    <div class="dimension-controls">
+                        <div class="control-group">
+                            <label>Ancho tabla</label>
+                            <input type="number" id="tableWidth" value="320" min="200" step="10">
+                        </div>
+                        <div class="control-group">
+                            <label>Ancho col. izq.</label>
+                            <input type="number" id="col1Width" value="70" min="40" step="5">
+                        </div>
+                        <div class="control-group">
+                            <label>Ancho col. der.</label>
+                            <input type="number" id="col2Width" value="70" min="40" step="5">
+                        </div>
+                        <div class="control-group">
+                            <label>Alto fila precio</label>
+                            <input type="number" id="rowHeight" value="32" min="20" step="2">
+                        </div>
+                        <div class="control-group">
+                            <label>Alto fila nombre</label>
+                            <input type="number" id="nameRowHeight" value="44" min="30" step="2">
+                        </div>
+                    </div>
+                    
                     <button class="btn btn-outline" onclick="generarImagen()">🖼️ Generar Imagen</button>
-                    <div class="img-preview" id="imgPreview"></div>
+                    <div class="img-preview" id="imgPreview">
+                        <canvas id="imageCanvas"></canvas>
+                        <div class="drag-hint"><span>↕ Arrastra los bordes de la tabla para redimensionar</span></div>
+                    </div>
                 </div>
             `;
         }
@@ -367,12 +409,24 @@
 
         panel.innerHTML = html;
 
-        // Cargar precios extra para paquete
         if (tipo === 'paquete') {
             renderExtraPrices(row);
+        } else {
+            // Eventos para controles numéricos
+            const dimInputs = ['tableWidth', 'col1Width', 'col2Width', 'rowHeight', 'nameRowHeight'];
+            dimInputs.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('input', () => generarImagen());
+            });
+            document.getElementById('colorAlternate')?.addEventListener('input', () => generarImagen());
+            
+            // Configurar arrastre en el canvas
+            setupDragEvents();
+            
+            // Generar imagen inicial
+            generarImagen();
         }
 
-        // Eventos para recalcular automáticamente
         const costoInput = document.getElementById('editCosto');
         const porcInputs = panel.querySelectorAll('.porc-input');
         const recalc = () => { recalcularPrecios(); updatePreview(); };
@@ -391,12 +445,205 @@
             renderEditPanel(selectedIndex);
         });
 
-        // Actualizar vista previa al cambiar cualquier campo
         const allInputs = panel.querySelectorAll('input, select');
         allInputs.forEach(inp => inp.addEventListener('input', updatePreview));
 
         recalcularPrecios();
         updatePreview();
+    }
+
+    // ---------- CONFIGURAR ARRASTRE (MEJORADO) ----------
+    function setupDragEvents() {
+        const canvas = document.getElementById('imageCanvas');
+        if (!canvas) return;
+
+        // Eliminar eventos antiguos para evitar duplicados
+        canvas.removeEventListener('mousedown', onDragStart);
+        canvas.removeEventListener('mousemove', onDragMove);
+        canvas.removeEventListener('mouseup', onDragEnd);
+        canvas.removeEventListener('mouseleave', onDragEnd);
+        canvas.removeEventListener('touchstart', onTouchStart, { passive: false });
+        canvas.removeEventListener('touchmove', onTouchMove, { passive: false });
+        canvas.removeEventListener('touchend', onDragEnd, { passive: false });
+
+        canvas.addEventListener('mousedown', onDragStart);
+        canvas.addEventListener('mousemove', onDragMove);
+        canvas.addEventListener('mouseup', onDragEnd);
+        canvas.addEventListener('mouseleave', onDragEnd);
+
+        // Soporte táctil
+        canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+        canvas.addEventListener('touchend', onDragEnd, { passive: false });
+    }
+
+    function getCanvasCoords(e, canvas) {
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        let clientX, clientY;
+        if (e.touches) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+        return {
+            x: (clientX - rect.left) * scaleX,
+            y: (clientY - rect.top) * scaleY
+        };
+    }
+
+    function getBordes() {
+        const row = currentData[selectedIndex];
+        if (!row || row._tipo !== 'granel') return null;
+
+        const anchoTabla = parseInt(document.getElementById('tableWidth')?.value) || 320;
+        const anchoCol1 = parseInt(document.getElementById('col1Width')?.value) || 70;
+        const anchoCol2 = parseInt(document.getElementById('col2Width')?.value) || 70;
+        const altoFila = parseInt(document.getElementById('rowHeight')?.value) || 32;
+        const altoFilaNombre = parseInt(document.getElementById('nameRowHeight')?.value) || 44;
+        const separacion = 4;
+        const paddingHorizontal = 8;
+        const margen = 8;
+        const anchoMinimo = paddingHorizontal * 2 + anchoCol1 + separacion + anchoCol2;
+        const anchoFinal = Math.max(anchoTabla, anchoMinimo);
+        const offsetX = margen + (anchoFinal - (anchoCol1 + separacion + anchoCol2)) / 2;
+
+        // Calcular altura real de la fila nombre (puede ajustarse según líneas)
+        // Para el arrastre usamos el valor del input, pero la imagen puede haberlo ajustado internamente.
+        // Tomamos el valor del input como referencia.
+        const altoNombre = Math.max(altoFilaNombre, 30); // valor base
+
+        return {
+            anchoTabla: anchoFinal,
+            anchoCol1: anchoCol1,
+            anchoCol2: anchoCol2,
+            altoFila: altoFila,
+            altoFilaNombre: altoNombre,
+            margen: margen,
+            offsetX: offsetX,
+            separacion: separacion,
+            xColDiv: margen + offsetX + anchoCol1,
+            xBordeDer: margen + anchoFinal,
+            yNombreFin: margen + altoNombre,
+            // Altura total de la tabla (para limitar detección)
+            altoTotal: margen + altoNombre + (row._precio100g > 0 ? 1 : 0) * altoFila // aproximado, pero usamos los datos reales
+        };
+    }
+
+    function detectarBorde(pos, bordes) {
+        if (!bordes) return null;
+        const tol = TOLERANCIA;
+        // Solo detectar si el mouse está dentro del área de la tabla verticalmente
+        const yInicio = bordes.margen;
+        const yFin = bordes.margen + bordes.altoFilaNombre + (currentData[selectedIndex]?._precio100g > 0 ? 5 : 0) * bordes.altoFila; // aproximado
+
+        if (pos.y < yInicio - tol || pos.y > yFin + tol) return null;
+
+        // Columna
+        if (Math.abs(pos.x - bordes.xColDiv) < tol) {
+            return { type: 'col', x: bordes.xColDiv, y: pos.y };
+        }
+        // Borde derecho
+        if (Math.abs(pos.x - bordes.xBordeDer) < tol) {
+            return { type: 'table', x: bordes.xBordeDer, y: pos.y };
+        }
+        // Fila nombre (solo en la línea horizontal inferior de la fila nombre)
+        if (Math.abs(pos.y - bordes.yNombreFin) < tol && pos.x > bordes.margen && pos.x < bordes.xBordeDer) {
+            return { type: 'row', x: pos.x, y: bordes.yNombreFin };
+        }
+        return null;
+    }
+
+    function onDragStart(e) {
+        const canvas = document.getElementById('imageCanvas');
+        if (!canvas) return;
+        const pos = getCanvasCoords(e, canvas);
+        const bordes = getBordes();
+        const borde = detectarBorde(pos, bordes);
+        if (!borde) return;
+
+        dragState = {
+            type: borde.type,
+            startX: pos.x,
+            startY: pos.y,
+            startVal: borde.type === 'col' ? bordes.anchoCol1 :
+                      borde.type === 'table' ? bordes.anchoTabla :
+                      bordes.altoFilaNombre,
+            canvas: canvas
+        };
+        canvas.setPointerCapture(e.pointerId);
+        canvas.style.cursor = borde.type === 'row' ? 'ns-resize' : 'ew-resize';
+        e.preventDefault();
+    }
+
+    function onDragMove(e) {
+        if (!dragState) {
+            // Cambiar cursor según el borde
+            const canvas = document.getElementById('imageCanvas');
+            if (!canvas) return;
+            const pos = getCanvasCoords(e, canvas);
+            const bordes = getBordes();
+            const borde = detectarBorde(pos, bordes);
+            canvas.style.cursor = borde ? (borde.type === 'row' ? 'ns-resize' : 'ew-resize') : 'default';
+            return;
+        }
+
+        const canvas = dragState.canvas;
+        if (!canvas) return;
+        const pos = getCanvasCoords(e, canvas);
+        const delta = dragState.type === 'row' ? pos.y - dragState.startY : pos.x - dragState.startX;
+        let nuevoVal = Math.round(dragState.startVal + delta);
+
+        // Aplicar límites
+        if (dragState.type === 'col') {
+            nuevoVal = Math.max(40, Math.min(200, nuevoVal));
+            document.getElementById('col1Width').value = nuevoVal;
+        } else if (dragState.type === 'table') {
+            nuevoVal = Math.max(200, Math.min(600, nuevoVal));
+            document.getElementById('tableWidth').value = nuevoVal;
+        } else if (dragState.type === 'row') {
+            nuevoVal = Math.max(30, Math.min(120, nuevoVal));
+            document.getElementById('nameRowHeight').value = nuevoVal;
+        }
+
+        // Regenerar imagen
+        generarImagen();
+        e.preventDefault();
+    }
+
+    function onDragEnd(e) {
+        if (dragState) {
+            const canvas = dragState.canvas;
+            if (canvas) {
+                canvas.style.cursor = 'default';
+                if (e.pointerId !== undefined) canvas.releasePointerCapture(e.pointerId);
+            }
+            dragState = null;
+        }
+    }
+
+    // Soporte táctil
+    function onTouchStart(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousedown', {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+        });
+        onDragStart(mouseEvent);
+    }
+
+    function onTouchMove(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousemove', {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+        });
+        onDragMove(mouseEvent);
     }
 
     // ---------- RECALCULAR PRECIOS ----------
@@ -598,83 +845,206 @@
         const row = currentData[selectedIndex];
         if (!row) return;
         const msg = buildWhatsAppMessage(row);
-        const numero = '5215565269250';
+        const numero = '5215519321156';
         const url = `https://api.whatsapp.com/send?phone=${numero}&text=${encodeURIComponent(msg)}`;
         window.open(url, '_blank');
     }
 
-    // ---------- GENERAR IMAGEN (GRANEL) ----------
+    // ---------- GENERAR IMAGEN (CON ARRASTRE MEJORADO) ----------
     function generarImagen() {
         const row = currentData[selectedIndex];
         if (!row || row._tipo !== 'granel') {
-            alert('Esta función solo está disponible para productos a granel.');
             return;
         }
+
+        const colorAlternate = document.getElementById('colorAlternate')?.value || '#f8fafc';
+        const colorBorder = '#1e293b';
+        let anchoTabla = parseInt(document.getElementById('tableWidth')?.value) || 320;
+        let anchoCol1 = parseInt(document.getElementById('col1Width')?.value) || 70;
+        let anchoCol2 = parseInt(document.getElementById('col2Width')?.value) || 70;
+        let altoFila = parseInt(document.getElementById('rowHeight')?.value) || 32;
+        let altoFilaNombre = parseInt(document.getElementById('nameRowHeight')?.value) || 44;
+
+        anchoCol1 = Math.max(40, anchoCol1);
+        anchoCol2 = Math.max(40, anchoCol2);
+        altoFila = Math.max(20, altoFila);
+        altoFilaNombre = Math.max(30, altoFilaNombre);
+        const separacion = 4;
+        const paddingHorizontal = 8;
+        const margen = 8;
+
+        const anchoMinimoColumnas = paddingHorizontal * 2 + anchoCol1 + separacion + anchoCol2;
+        anchoTabla = Math.max(anchoTabla, anchoMinimoColumnas);
+
+        // Datos de precios
         const nombre = row['Producto'] || 'Producto';
         const p100 = toNumber(row._precio100g);
         const p250 = toNumber(row._precio250g);
         const pX = toNumber(row._precioXmultiplicar);
         const pK = toNumber(row._precioKilo);
         const pC = toNumber(row._precioCaja);
-
-        const canvas = document.createElement('canvas');
-        canvas.width = 400;
-        canvas.height = 280;
-        const ctx = canvas.getContext('2d');
-
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#cccccc';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(0, 0, canvas.width, canvas.height);
-
-        ctx.fillStyle = '#1e293b';
-        ctx.font = 'bold 20px Segoe UI, sans-serif';
-        ctx.textAlign = 'center';
-        let nombreMostrar = nombre;
-        if (nombre.length > 30) nombreMostrar = nombre.substring(0, 28) + '…';
-        ctx.fillText(nombreMostrar, canvas.width/2, 40);
-
         const datos = [
             ['100g', p100],
             ['250g', p250],
             ['Xmultiplicar', pX],
             ['Kilo', pK],
             ['Caja', pC]
-        ];
-        let y = 65;
-        const altoFila = 30;
-        datos.forEach(([label, price]) => {
-            if (price > 0) {
-                ctx.strokeStyle = '#e2e8f0';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(20, y);
-                ctx.lineTo(canvas.width - 20, y);
-                ctx.stroke();
+        ].filter(d => d[1] > 0);
 
-                ctx.fillStyle = '#0f172a';
-                ctx.font = '16px Segoe UI, sans-serif';
-                ctx.textAlign = 'left';
-                ctx.fillText(label, 30, y + 22);
-                ctx.textAlign = 'right';
-                ctx.fillText('$' + price.toFixed(2), canvas.width - 30, y + 22);
-                y += altoFila;
+        if (datos.length === 0) {
+            const canvas = document.getElementById('imageCanvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                canvas.width = 300;
+                canvas.height = 100;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '14px Segoe UI, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Sin precios configurados', canvas.width/2, canvas.height/2);
             }
-        });
-        ctx.strokeStyle = '#e2e8f0';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(20, y);
-        ctx.lineTo(canvas.width - 20, y);
-        ctx.stroke();
+            return;
+        }
 
-        const container = document.getElementById('imgPreview');
-        container.innerHTML = '';
-        container.appendChild(canvas);
+        // Medir y dividir nombre en líneas
+        const canvasTemp = document.createElement('canvas');
+        const ctxTemp = canvasTemp.getContext('2d');
+        const maxAnchoNombre = anchoTabla - paddingHorizontal * 2;
+        let fontSize = 16;
+        ctxTemp.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+        let lineas = [];
+        let palabras = nombre.split(' ');
+        let lineaActual = '';
+        for (let p of palabras) {
+            let prueba = lineaActual ? lineaActual + ' ' + p : p;
+            if (ctxTemp.measureText(prueba).width < maxAnchoNombre) {
+                lineaActual = prueba;
+            } else {
+                if (lineaActual) lineas.push(lineaActual);
+                lineaActual = p;
+            }
+        }
+        if (lineaActual) lineas.push(lineaActual);
+        if (lineas.length > 3) {
+            let totalChars = nombre.length;
+            let charsPorLinea = Math.floor(totalChars / 3);
+            lineas = [];
+            for (let i = 0; i < 3; i++) {
+                let inicio = i * charsPorLinea;
+                let fin = (i === 2) ? totalChars : inicio + charsPorLinea;
+                lineas.push(nombre.substring(inicio, fin).trim());
+            }
+        }
+        let maxAnchoLinea = Math.max(...lineas.map(l => ctxTemp.measureText(l).width));
+        while (maxAnchoLinea > maxAnchoNombre && fontSize > 10) {
+            fontSize--;
+            ctxTemp.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+            maxAnchoLinea = Math.max(...lineas.map(l => ctxTemp.measureText(l).width));
+        }
+        if (maxAnchoLinea > maxAnchoNombre) {
+            lineas = lineas.map(l => {
+                while (ctxTemp.measureText(l + '…').width > maxAnchoNombre && l.length > 2) {
+                    l = l.slice(0, -1);
+                }
+                return l + '…';
+            });
+        }
+
+        const numLineas = lineas.length;
+        // Ajustar alto de fila nombre al menos para las líneas
+        altoFilaNombre = Math.max(altoFilaNombre, 30 + numLineas * (fontSize * 1.2));
+
+        const altoTotal = margen * 2 + altoFilaNombre + datos.length * altoFila;
+
+        const canvas = document.getElementById('imageCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        canvas.width = anchoTabla + margen * 2;
+        canvas.height = altoTotal;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        let y = margen;
+
+        // ---- FILA DEL NOMBRE (BLANCA) ----
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(margen, y, anchoTabla, altoFilaNombre);
+        ctx.strokeStyle = colorBorder;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(margen, y, anchoTabla, altoFilaNombre);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#0f172a';
+        const lineHeight = fontSize * 1.2;
+        const totalAlturaTexto = numLineas * lineHeight;
+        const startY = y + (altoFilaNombre - totalAlturaTexto) / 2 + fontSize * 0.35;
+        lineas.forEach((line, i) => {
+            ctx.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+            ctx.fillText(line, canvas.width / 2, startY + i * lineHeight);
+        });
+
+        y += altoFilaNombre;
+
+        // ---- FILAS DE PRECIOS ----
+        const anchoTotalColumnas = anchoCol1 + separacion + anchoCol2;
+        const offsetX = margen + (anchoTabla - anchoTotalColumnas) / 2;
+
+        datos.forEach((fila, index) => {
+            const colorFondo = (index % 2 === 0) ? colorAlternate : '#ffffff';
+            ctx.fillStyle = colorFondo;
+            ctx.fillRect(margen, y, anchoTabla, altoFila);
+
+            ctx.strokeStyle = colorBorder;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(margen, y + altoFila);
+            ctx.lineTo(margen + anchoTabla, y + altoFila);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(margen + offsetX + anchoCol1, y);
+            ctx.lineTo(margen + offsetX + anchoCol1, y + altoFila);
+            ctx.stroke();
+
+            // Descripción
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#1e293b';
+            let nombrePrecio = fila[0];
+            ctx.font = '13px Segoe UI, sans-serif';
+            const maxWidthDesc = anchoCol1 - 6;
+            if (ctx.measureText(nombrePrecio).width > maxWidthDesc) {
+                ctx.font = '11px Segoe UI, sans-serif';
+                if (ctx.measureText(nombrePrecio).width > maxWidthDesc) {
+                    while (ctx.measureText(nombrePrecio + '…').width > maxWidthDesc && nombrePrecio.length > 2) {
+                        nombrePrecio = nombrePrecio.slice(0, -1);
+                    }
+                    nombrePrecio += '…';
+                }
+            }
+            ctx.fillText(nombrePrecio, margen + offsetX + 4, y + altoFila / 2);
+
+            // Precio
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'middle';
+            ctx.font = '14px Segoe UI, sans-serif';
+            ctx.fillStyle = '#1e293b';
+            ctx.fillText('$' + fila[1].toFixed(2), margen + offsetX + anchoCol1 + separacion + anchoCol2 - 4, y + altoFila / 2);
+
+            y += altoFila;
+        });
+
+        ctx.strokeStyle = colorBorder;
+        ctx.lineWidth = 2;
+        const altoTotalTabla = altoFilaNombre + datos.length * altoFila;
+        ctx.strokeRect(margen, margen, anchoTabla, altoTotalTabla);
     }
 
-    // ---------- EXPORTAR EXCEL (SOLO MODIFICADOS, CAMPOS ELEVENTA) ----------
+    // ---------- EXPORTAR EXCEL ----------
     function exportExcel() {
         const modificados = currentData.filter(row => row._modificado === true);
         if (modificados.length === 0) {
