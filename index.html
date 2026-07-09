@@ -696,7 +696,7 @@
             row._precio250g = p250;
             row._precioKilo = pK;
             row._precioCaja = pC;
-            row['P. Venta'] = pK;
+            row['P. Venta'] = pX;
             row['P. Mayoreo'] = pC;
 
             document.getElementById('displayX').textContent = '$' + pX.toFixed(2);
@@ -1051,19 +1051,30 @@
             alert('No hay productos modificados para exportar.');
             return;
         }
-        const exportData = modificados.map(row => ({
+        const exportData = modificados.map(row => {
+        const precioVenta = row._tipo === 'granel'
+            ? toNumber(row._precioXmultiplicar)
+            : toNumber(row['P. Venta']);
+
+        const precioKilo = row._tipo === 'granel'
+            ? toNumber(row._precioKilo)
+            : '';
+
+        return {
             'Código': row['Código'] || '',
             'Producto': row['Producto'] || '',
             'P. Costo': toNumber(row['P. Costo']),
-            'P. Venta': toNumber(row['P. Venta']),
+            'P. Venta': precioVenta,
             'P. Mayoreo': toNumber(row['P. Mayoreo']),
             'Departamento': row['Departamento'] || '',
             'Existencia': row['Existencia'] || '',
             'Inv. Mínimo': row['Inv. Mínimo'] || '',
             'Inv. Máximo': row['Inv. Máximo'] || '',
             'Tipo de Venta': row['Tipo de Venta'] || '',
-            'Proveedor': row['Proveedor'] || ''
-        }));
+            'Proveedor': row['Proveedor'] || '',
+            'Kilo': precioKilo
+        };
+    });
 
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.json_to_sheet(exportData);
